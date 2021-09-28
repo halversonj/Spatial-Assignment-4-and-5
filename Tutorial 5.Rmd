@@ -1,0 +1,88 @@
+---
+title: "Tutorial 5"
+author: "Jack Halverson"
+date: "9/28/2021"
+output: html_document
+---
+
+### Load Packages
+```{r}
+library(stars)
+library(sf)
+library(tidyverse)
+library(osmextract)
+library(tigris)
+```
+
+### Create raster layer from polygon layer
+```{r}
+access_poly <- st_read("SLO_access.geojson", quiet=TRUE)
+
+access_raster <- st_rasterize(access_poly["accessibility"], 
+                              nx = 100, ny = 100) 
+plot(access_raster)
+```
+
+### Add raster layer to street network layer
+```{r}
+SLO_city_limits <- places("California") %>%
+  filter(NAME == "San Luis Obispo") 
+
+SLO_file <- oe_match("San Luis Obispo", quiet = TRUE)
+
+SLO_streets <- oe_read(SLO_file$url, 
+                   provider = "openstreetmap_fr", 
+                   download_directory = "networks", 
+                   layer = "lines", 
+                   quiet = TRUE) %>%
+  filter(!is.na(highway)) %>%
+  st_transform(crs = st_crs(SLO_city_limits)) %>%
+  st_filter(SLO_city_limits)
+
+ggplot(SLO_streets) +
+  geom_stars(data = access_raster) +
+  geom_sf(color = "white", alpha = 0.2) +
+  scale_fill_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Bike access to\ntransit stops") +
+  theme_void()
+```
+
+### Make points from grid cells
+```{r}
+access_points <- st_as_sf(access_raster, as_points = TRUE)
+
+ggplot(SLO_streets) +
+  geom_sf(data = access_points, aes(color = accessibility), size = 0.1) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Bike access to\ntransit stops") +
+  theme_void()
+```
+
+### Polygons from grid cells
+```{r}
+access_poly2 <- st_as_sf(access_raster, as_points = FALSE, merge = TRUE)
+
+ggplot(SLO_streets) +
+  geom_sf(data = access_poly2, aes(fill = accessibility), color = 'gray') +
+  scale_fill_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Bike access to\ntransit stops") +
+  theme_void()
+```
+
+### Create contours directly from rasters
+```{r}
+access_contours <- st_contour(access_raster, contour_lines = TRUE, 
+                              breaks = c(0,2,4,6,8))
+
+ggplot(SLO_streets) +
+  geom_sf(color = "gray") +
+  geom_sf(data = access_contours, aes(color = accessibility), fill = NA) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       breaks = c(0,2,4,6,8),
+                       name = "Bike access to\ntransit stops") +
+  theme_void()
+```
